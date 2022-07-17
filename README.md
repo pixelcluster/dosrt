@@ -5,3 +5,7 @@ The core raytracer is split into modules that abstract functionality (e. g. disp
 # Build
 In a FreeDOS shell with the nasm package:
 `nasm CORE.ASM -o OUTPUT.EXE`
+
+# 
+
+Written entirely in FreeDOS EDIT 0.9.
