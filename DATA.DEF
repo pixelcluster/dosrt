@@ -1,0 +1,4 @@
+; Data segments for the modules. Must match the modules in MODULES.DEF
+include 'CON_DATA.ASM'
+; Display module, available files:
+;    CON_DATA.ASM (console "display")

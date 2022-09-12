@@ -2,6 +2,10 @@
 ; and defines API the rest of modules will work with
 format MZ
 entry code:_start
+include 'DATA.DEF'
+
+segment core_data
+
 
 segment code
     include 'MODULES.DEF'     
@@ -13,20 +17,17 @@ segment code
     ; display functions
     
     ; disp_init: Initialize display
-    ; Parameters:
-    ;   In es: display data segment
+    ; Parameters: None
     ; Returns: nothing
 
     ; disp_size: Returns display size
-    ; Parameters:
-    ;   In es: display data segment
+    ; Parameters: None
     ; Returns:
     ;   In ax: Width of display in pixels
     ;   In bx: Height of display in pixels
 
     ; disp_put: Writes a pixel value
     ; Parameters:
-    ;   In es: display data segment
     ;   In ax: x coordinate of the pixel
     ;   In bx: y coordinate of the pixel
     ;   In cl: r component of the color (8 bit)
@@ -39,26 +40,22 @@ segment code
     ; a long shot.
 
     ; disp_finish: Uninitialize display
-    ; Parameters:
-    ;   In es: display data segment
+    ; Parameters: None
     ; Returns: nothing
 
-    ; Segment assignment (may change)
-    CORE_SEG    equ 0
-    DISPLAY_SEG equ 1    
-
+    
     CORE_COLOR_COMPONENT_R equ 0
     CORE_COLOR_COMPONENT_G equ 1
     CORE_COLOR_COMPONENT_B equ 2
 
-    %define CORE_L_SCRWIDTH bp-2
-    %define CORE_L_SCRHEIGHT bp-4
-    %define CORE_L_COLOR_G bp-8
-    %define CORE_L_COLOR_R bp-12
-    %define CORE_L_STEP_G bp-16
-    %define CORE_L_STEP_R bp-20
-    %define CORE_L_POSX bp-22
-    %define CORE_L_POSY bp-24
+    label CORE_L_SCRWIDTH at bp-2
+    label CORE_L_SCRHEIGHT at bp-4
+    label CORE_L_COLOR_G at bp-8
+    label CORE_L_COLOR_R at bp-12
+    label CORE_L_STEP_G at bp-16
+    label CORE_L_STEP_R at bp-20
+    label CORE_L_POSX at bp-22
+    label CORE_L_POSY at bp-24
 
     ; core_step_init: Initialize pattern step values    
     ; Parameters:
@@ -106,12 +103,11 @@ segment code
         ret
         
 
-    global _start
     _start:
-        mov ax, DISPLAY_SEG
-        mov es, ax
+        mov ax, core_data
+        mov ds, ax
         call disp_init
-
+        
         finit
 
         start_draw_init:
@@ -153,11 +149,18 @@ segment code
         start_draw:
 
         ; get key input (ASCII)
-        mov ax, 0x800
-        ;int 21h
-        cmp al, 0x78 ; x
-;        je start_exit
+        xor al, al
+        mov ah, 1
+        int 16h
+        jz start_key_end
+        xor ax, ax
+        int 16h
 
+        cmp al, 0x78 ; x
+        je start_exit
+        jmp start_draw
+        
+        start_key_end:
         push bp
         mov bx, bp
         sub bx, 8
@@ -199,8 +202,6 @@ segment code
         jmp start_draw
         
         start_exit:
-        mov ax, DISPLAY_SEG
-        mov es, ax
         call disp_finish
        
         mov ax, 0x4C00

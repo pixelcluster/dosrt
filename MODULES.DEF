@@ -1,4 +1,5 @@
-include "disp_mod.asm"
+include "DISP_CON.ASM"
 ; display subsystem
 ; available:
-;   disp_mod.asm (mode 13h)
+;   DISP_MOD.ASM (mode 13h)
+;   DISP_CON.ASM (console debug)
