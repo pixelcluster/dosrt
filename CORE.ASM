@@ -1,11 +1,10 @@
 ; Core raytracer part, handles key input
 ; and defines API the rest of modules will work with
+format MZ
+entry code:_start
 
-segment .text
-    ;entrypoint
-    jmp _start
-
-    %include "MODULES.DEF"     
+segment code
+    include 'MODULES.DEF'     
 
     ; General calling convention:
     ; Non-return registers should not be clobbered.
@@ -206,3 +205,5 @@ segment .text
        
         mov ax, 0x4C00
         int 21h        
+
+    

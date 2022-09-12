@@ -1,4 +1,3 @@
-%include "disp_mod.asm"
-; display subsystem
-; available: 
-;   disp_mod.asm (mode 13h)
+include "MODE13.DEF"
+MODE13_SHIFT_R equ MODE13_BITS_G + MODE13_BITS_B
+MODE13_SHIFT_G equ
