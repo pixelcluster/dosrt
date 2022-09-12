@@ -5,10 +5,59 @@ entry code:_start
 include 'DATA.DEF'
 
 segment core_data
-
+CORE_KEYB_SCANCODE_TO_ASCII db \
+  0,   0,  49,  50,  51,  52,  53,  54, \
+ 55,  56,  57,  48,  45,  61,   0,   9, \
+113, 119, 101, 114, 116, 121, 117, 105, \
+111, 112,  91,  93,   0,   0,  97, 115, \
+100, 102, 103, 104, 106, 107, 108,  59, \
+ 27,   0,   0,  92, 122, 120,  99, 118, \
+ 89, 110, 109,  44,  46,  47,   0,   0, \
+  0,  32,   0,   0,   0,   0,   0,   0, \
+  0,   0,   0,   0,   0,   0,   0,   0, \
+  0,   0,   0,   0,   0,   0,   0,   0, \
+  0,   0,   0,   0,   0,   0,   0,   0, \
+  0,   0,   0,   0,   0,   0,   0,   0, \
+  0,   0,   0,   0,   0,   0,   0,   0, \
+  0,   0,   0,   0,   0,   0,   0,   0, \
+  0,   0,   0,   0,   0,   0,   0,   0, \
+  0,   0,   0,   0,   0,   0,   0,   0
+CORE_KEYB_BUFFER rb 256
+CORE_KEYB_READ rb 1
+CORE_KEYB_WRITE rb 1
+CORE_KEYB_ISR_RESTORE rb 4
 
 segment code
     include 'MODULES.DEF'     
+
+    ; keyboard interrupt handler
+    core_keyb_irq:
+        push ax
+        push bx
+        push ds
+        ; setup registers and segment
+        mov ax, core_data
+        mov ds, ax
+        xor ah, ah
+        xor bh, bh
+        ; translate scancode to ascii
+        in al, 0x60
+        mov bl, al
+        mov al, [bx+CORE_KEYB_SCANCODE_TO_ASCII]
+        ; write ascii
+        mov bl, [CORE_KEYB_WRITE]
+        mov [bx+CORE_KEYB_BUFFER], al
+        ; increment write pointer
+        inc bl
+        mov [CORE_KEYB_WRITE], bl
+
+        mov al, 0x20
+        out 0x20, al        
+        
+        pop ds
+        pop bx
+        pop ax
+        iret
 
     ; General calling convention:
     ; Non-return registers should not be clobbered.
@@ -105,6 +154,23 @@ segment code
 
     _start:
         mov ax, core_data
+        mov ds, ax        
+
+        mov ah, 35h
+        mov al, 9
+        int 21h
+
+        mov word [CORE_KEYB_ISR_RESTORE+2], bx
+        mov word [CORE_KEYB_ISR_RESTORE], es        
+
+        mov ax, code
+        mov ds, ax
+        mov al, 9
+        mov ah, 25h
+        mov dx, core_keyb_irq
+        int 21h
+
+        mov ax, core_data
         mov ds, ax
         call disp_init
         
@@ -149,16 +215,21 @@ segment code
         start_draw:
 
         ; get key input (ASCII)
-        xor al, al
-        mov ah, 1
-        int 16h
-        jz start_key_end
-        xor ax, ax
-        int 16h
+        xor bh, bh
+        mov al, [CORE_KEYB_WRITE]
+        mov bl, [CORE_KEYB_READ]
+        start_key_loop:
+        ; have we processed all keys?
+        cmp al, bl
+        je start_key_end
 
-        cmp al, 0x78 ; x
+        mov cl, [bx+CORE_KEYB_BUFFER]
+        
+        cmp cl, 0x78 ; x
         je start_exit
-        jmp start_draw
+        
+        inc bl
+        jmp start_key_loop
         
         start_key_end:
         push bp
@@ -203,6 +274,13 @@ segment code
         
         start_exit:
         call disp_finish
+
+        mov dx, word [CORE_KEYB_ISR_RESTORE+2]
+        mov ax, word [CORE_KEYB_ISR_RESTORE]
+        mov ds, ax
+        mov al, 9
+        mov ah, 25h
+        int 21h
        
         mov ax, 0x4C00
         int 21h        
