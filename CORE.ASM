@@ -52,16 +52,27 @@ segment .text
     CORE_COLOR_COMPONENT_G equ 1
     CORE_COLOR_COMPONENT_B equ 2
 
+    %define CORE_L_SCRWIDTH bp-2
+    %define CORE_L_SCRHEIGHT bp-4
+    %define CORE_L_COLOR_G bp-8
+    %define CORE_L_COLOR_R bp-12
+    %define CORE_L_STEP_G bp-16
+    %define CORE_L_STEP_R bp-20
+    %define CORE_L_POSX bp-22
+    %define CORE_L_POSY bp-24
+
     ; core_step_init: Initialize pattern step values    
     ; Parameters:
-    ;   In bp: Offset of the screen size in the stack segment
-    ;   In bx: Offset of the desired placement of the step value
-    ; Returns: Nothing, but stores the step in [ss:bx]
+    ;   In bx: Screen dimension
+    ;   In bp: Offset of the desired placement of the step value
+    ; Returns: Nothing, but stores the step in [bp]
     core_step_init:
-        fldz
-        fild dword [ss:bp]
-        fdivp
-        fstp dword [ss:bx]
+        push bx
+        mov bx, sp
+        fld1
+        fidiv word [ss:bx]
+        fstp dword [bp]
+        pop bx
         ret
 
     ; core_color_add: Adds the step value to the color and stores it.
@@ -90,6 +101,7 @@ segment .text
         add bp, 2
         mov bp, sp
         fistp word [ss:bp]
+        pop bp ; extra byte, want to discard
         pop ax
         pop bp
         ret
@@ -104,111 +116,92 @@ segment .text
         finit
 
         start_draw_init:
+
+        mov bp, sp        
+        sub sp, 24 ; allocate local vars    
+        ; Stack variables:
+        ; bp-2: screen width
+        ; bp-4: screen height
+        ; bp-8: current color G
+        ; bp-12: current color R
+        ; bp-16: color step Y/G
+        ; bp-20: color step X/R
+        ; bp-22: pixel counter X
+        ; bp-24: pixel counter Y
+
         call disp_size
-        ; store ax, bx (screen size) on stack
-        push ax
-        push bx
-        mov bp, sp
-        add bp, 2
-
-        sub sp, 16 ; allocate step and color floats
-        mov bx, sp
-        add bx, 12 ; 8 bytes for the two color floats,
-                   ; 4 bytes for one step float =
-                   ; [ss:bx] points at the first step float
-    
-        call core_step_init        
-        sub bp, 2
-        sub bx, 4
-        call core_step_init
-        sub bp, 2
-        sub bx, 8
-
-        ; Initialize color float storage to 0
-        mov cx, 0
-        start_loop_color_init:
-        cmp cx, 2
-        je start_loop_color_init_done
-        mov word [ss:bx], 0
-        add bx, 2
-        mov word [ss:bx], 0
-        add bx, 2
-        inc cx
-        start_loop_color_init_done:
+        mov word [CORE_L_SCRWIDTH], ax
+        mov word [CORE_L_SCRHEIGHT], bx
         
-        ; bx now points to the first byte after the color
-        ; floats, while bp points to the first byte after the
-        ; step floats. bx = bp - 8
-
+        push bp
+        sub bp, 16
+        call core_step_init
+        sub bp, 4
+        mov bx, ax
+        call core_step_init
+        pop bp
+        ; Initialize color float storage to 0
+        mov word [bp-6], 0
+        mov word [bp-8], 0
+        mov word [bp-10], 0
+        mov word [bp-12], 0
+        
         ; Initialize pixel counters
-        mov ax, 0
-        push ax
-        push ax
+        mov word [CORE_L_POSX], 0
+        mov word [CORE_L_POSY], 0
         
         ; Just show a simple test pattern for now
         start_draw:
 
         ; get key input (ASCII)
         mov ax, 0x800
-        int 21h
+        ;int 21h
         cmp al, 0x78 ; x
-        je start_exit
+;        je start_exit
 
+        push bp
         mov bx, bp
-        sub bx, 12 ; 8 bytes (see above) + 4 bytes: bp points
-                   ; at first color float
-        sub bp, 4
+        sub bx, 8
+        sub bp, 16
         call core_color_add
         mov cx, ax
         
         sub bx, 4
         sub bp, 4
         call core_color_add
-        ; Restore pointer position from before loop   
-        add bp, 8
-        ; Do not restore bx, it is recalculated at the top of the loop
-        ; and used for other purposes here
-        mov bx, sp ; bx points to current pixel indices
+        pop bp
         
-        mov cl, 255 ; r component
+        mov cl, 255;cl ; r component
         mov ch, al ; g component
         mov dl, 0 ; b component
         
-        add bx, 2 ; bx points to horizontal pixel index
-        mov ax, word [ss:bx]
-        sub bx, 2
-        mov bx, word [ss:bx]
+        mov ax, word [CORE_L_POSX]
+        mov bx, word [CORE_L_POSY]
         call disp_put
-        
-        ; The screen dimensions are located right above the step floats
-        ; on stack (+ 8 bytes). Adding two bytes skips the height dimension
-        ; and makes bx point to the width.
-        mov bx, bp
-        add bx, 10
-        mov bx, [ss:bx] ; bx now contains the width instead of its pointer
-        
-        pop cx ; pop width in cx for now
-        pop ax ; pop height
-        
         inc ax
-        cmp ax, bx
+        
+        mov cx, word [CORE_L_SCRWIDTH]
+        cmp ax, cx
         je start_draw_width_overflow
-        jmp start_draw
+        jmp start_draw_pos_update
 
         start_draw_width_overflow:
         mov ax, 0
 
         ; Load height similarly as width
-        mov bx, bp
-        add bx, 8
-        mov bx, [ss:bx]
-        inc cx
-        cmp cx, bx
-        jne start_draw
-        mov cx, 0 ; start over
+        mov dx, word [CORE_L_SCRHEIGHT]
+        inc bx
+        cmp bx, dx
+        jne start_draw_pos_update
+        mov dx, 0 ; start over
+        start_draw_pos_update:
+        mov word [CORE_L_POSX], ax
+        mov word [CORE_L_POSY], bx
         jmp start_draw
         
         start_exit:
+        mov ax, DISPLAY_SEG
+        mov es, ax
         call disp_finish
        
         mov ax, 0x4C00
